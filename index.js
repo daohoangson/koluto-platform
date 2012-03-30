@@ -50,6 +50,7 @@ app.get('/', middlewareApiNoAuth, function(req, res, next) {
             '/users',
             '/documents',
             '/words',
+            '/sections',
        ]
    }); 
 });
@@ -148,6 +149,18 @@ app.del('/documents/:documentId', middlewareApiAuth, function(req, res) {
 app.get('/words', middlewareApiAuth, function(req, res) {
     db.getAppWords(api.appId(), function(err, results) {
         api.response(res, { 'words': results });
+    });
+});
+
+app.get('/words/:word', middlewareApiAuth, function(req, res) {
+    db.getAppWord(api.appId(), req.params.word, function(err, word) {
+        api.response(res, { 'word': word });
+    });
+});
+
+app.get('/sections/:section', middlewareApiAuth, function(req, res) {
+    db.getAppSection(api.appId(), req.params.section, function(err, results) {
+        api.response(res, { 'section': { 'words' : results } });
     });
 });
 

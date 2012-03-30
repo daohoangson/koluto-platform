@@ -174,12 +174,63 @@ db.getAppWords = function(appId, callback) {
     });
 };
 
+db.getAppWord = function(appId, word, callback) {
+    redisClient.get(db._getAppWordKey(appId, word), function(err, globalCount) {
+        if (!err && globalCount > 0) {
+            // this word actually exists in db
+            var result = {
+                'word': word,
+                'global_count': globalCount,
+                'sections': [],
+            }
+            
+            var sectionKeyPattern = db._getAppWordSectionKey(appId, word, '*');
+            var sectionKeyPatternParts = sectionKeyPattern.split('*');
+            
+            redisClient.keys(sectionKeyPattern, function(err, keys) {
+                if (!err && keys && keys.length > 0) {
+                    // we found some sections with this word
+                    var lastKey = _.last(keys);
+                    _.each(keys, function(key) {
+                        redisClient.get(key, function(err, sectionCount) {
+                            // TODO: improve this
+                            var sectionName = key;
+                            sectionName = sectionName.replace(sectionKeyPatternParts[0], '');
+                            sectionName = sectionName.replace(sectionKeyPatternParts[1], '');
+                            
+                            result.sections.push({
+                                'section_id': sectionName,
+                                'section_count': sectionCount
+                            });
+                            
+                            if (key == lastKey) {
+                                // assuming all redis call return after similar delay
+                                // we will issue callback when the last section is processed
+                                result.sections = _.sortBy(result.sections, function(section) {
+                                    return section.section_id;
+                                }).reverse();
+
+                                callback(err, result);
+                            }
+                        });
+                    })
+                } else {
+                    callback(err, result);
+                }
+            })
+        } else {
+            callback(err, {});
+        }
+    });
+}
+
 db.incrAppWord = function(appId, word, sections, callback) {
     redisClient.sadd(db._getAppWordSetKey(appId), word, function() {
         redisClient.incr(db._getAppWordKey(appId, word), function() {
             if (sections && sections.length > 0) {
                 // the parent document has some section defined
                 _.each(sections, function(section) {
+                    redisClient.sadd(db._getAppSectionWordSetKey(appId, section), word);
                     redisClient.incr(db._getAppWordSectionKey(appId, word, section));
                 })
             }
@@ -195,10 +246,27 @@ db._getAppWordSetKey = function(appId) {
     return util.format('aws_%s', appId);
 }
 
+db._getAppSectionWordSetKey = function(appId, section) {
+    return util.format('astws_%s_%s', appId, section);
+}
+
 db._getAppWordKey = function(appId, word) {
     return util.format('as_%s_%s', appId, word);
 }
 
 db._getAppWordSectionKey = function(appId, word, section) {
-    return util.format('awst_%s_%s_%s', appId, section, word);
+    return util.format('awst_%s_%s_%s', appId, word, section);
+}
+
+// Sections related...
+db.getAppSection = function(appId, section, callback) {
+    redisClient.sort(db._getAppSectionWordSetKey(appId, section), 'by', db._getAppWordSectionKey(appId, '*', section), 'limit', 0, 100, 'desc', function(err, results) {
+        if (err) {
+            // there is some error, exit asap
+            callback(err, results);
+            return;
+        }
+
+        callback(err, results);
+    });
 }
