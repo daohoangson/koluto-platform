@@ -56,7 +56,7 @@ app.get('/', middlewareApiNoAuth, function(req, res, next) {
 });
 
 app.get('/users', middlewareApiNoAuth, function(req, res) {
-   api.responseError(res, 'POST with `username`, `password` and `email` to create an account');
+   api.responseError(res, 'POST with `username`, `password` and `email` to create an account', 404);
 });
 
 app.post('/users', middlewareApiNoAuth, function(req, res) {
@@ -94,6 +94,14 @@ app.get('/documents', middlewareApiAuth, function(req, res) {
         if (err) {
             api.responseError(res, 'Unable to get documents');
         } else {
+            if (config.APP_DEBUG) {
+                for (var i in documents) {
+                    documents[i].curl = {
+                        delete: 'curl http://sondh:1@127.0.0.1:' + config.APP_PORT + '/documents/' + documents[i]._id + ' -X DELETE'
+                    };
+                }
+            };
+
             api.response(res, { 'documents': documents });
         }
     });
@@ -106,24 +114,26 @@ app.post('/documents', middlewareApiAuth, function(req, res) {
         'extraData': req.body.extraData,
         'sections': req.body.sections
     };
-    
+
+    var documentModel = require('./model/document.js');
+            
+    newDocument.words = documentModel.parseText(newDocument.text, {
+        maxTokensToMerge: 3,
+        // keepMergedOnly: true, -- we should keep them, irrelevant tokens are removed by smart filters
+        tryToBeSmart: 1
+    });
+
     db.insertDocument(newDocument, function(err, document) {
         if (err) {
             api.responseError(res, 'Unable to insert document');
         } else {
-            var documentModel = require('./model/document.js');
+            var counts = documentModel.countTokens(newDocument.words);
             
-            var tokens = documentModel.parseText(document.text, {
-                maxTokensToMerge: 3,
-                keepMergedOnly: true
-            });
+            for (var token in counts) {
+                db.incrWord(api.appId(), token, newDocument.sections, counts[token]);
+            }
             
-            _.each(tokens, function(token) {
-                db.incrAppWord(api.appId(), token, document.sections);
-            });
-            
-            document.text = 'truncated';
-            api.response(res, { 'document': document });
+            api.response(res, { 'documentId': document._id });
         }
     })
 });
@@ -144,10 +154,29 @@ app.del('/documents/:documentId', middlewareApiAuth, function(req, res) {
             });
         }
     });
-})
+});
+
+app.get('/similar', middlewareApiAuth, function(req, res) {
+    api.responseError(res, 'POST with `text` to find similar documents', 404);
+});
+
+app.post('/similar', middlewareApiAuth, function(req, res) {
+    var text = req.body.text;
+
+    if (text && text.length > 0) {
+        db.findSimilarDocuments(api.appId(), text, function(err, documents) {
+            console.log(err);
+            api.response(res, documents);
+        });
+    } else {
+        api.responseError(res, '`text` is required for similar search', 500);
+    }
+});
 
 app.get('/words', middlewareApiAuth, function(req, res) {
-    db.getAppWords(api.appId(), function(err, results) {
+    var options = req.query['options'];
+
+    db.getAppWords(api.appId(), options, function(err, results) {
         api.response(res, { 'words': results });
     });
 });
@@ -159,9 +188,24 @@ app.get('/words/:word', middlewareApiAuth, function(req, res) {
 });
 
 app.get('/sections/:section', middlewareApiAuth, function(req, res) {
-    db.getAppSection(api.appId(), req.params.section, function(err, results) {
-        api.response(res, { 'section': { 'words' : results } });
+    var filterAppWords = req.query['filterAppWords'];
+    var options = req.query['options'];
+
+    db.getAppSectionWords(api.appId(), req.params.section, options, function(err, sectionWords) {
+        if (!!filterAppWords) {
+            // get app words then filter them out from the section words
+            db.getAppWords(api.appId(), options, function(err, appWords) {
+                var wordsFiltered = sectionWords;
+                if (!err) {
+                    wordsFiltered = _.difference(wordsFiltered, appWords);
+                }
+                api.response(res, { 'section': { 'wordsFiltered' : wordsFiltered } });
+            });
+        } else {
+            // return the list of words immediately
+            api.response(res, { 'section': { 'words' : sectionWords } });
+        }
     });
 });
 
-app.listen(29690);
+app.listen(config.APP_PORT);

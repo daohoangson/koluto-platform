@@ -161,9 +161,36 @@ db.deleteDocument = function(document, callback) {
     );
 };
 
+// redis keys
+db._getAppWordSetKey = function(appId) {
+    return util.format('aws_%s', appId);
+};
+
+db._getAppSectionWordSetKey = function(appId, section) {
+    return util.format('astws_%s_%s', appId, section);
+};
+
+db._getAppWordHashKey = function(appId, word) {
+    return util.format('awh_%s_%s', appId, word);
+};
+
+db._getWordHashKeyAppKey = function() {
+    // it's safe to do this because
+    // we know for a fact that the '_' character
+    // will never make it to a section key (see below)
+    return '_app';
+};
+
+db._getWordHashKeySectionKey = function(section) {
+    return 's_' + section;
+};
+
 // Word related...
-db.getAppWords = function(appId, callback) {
-    redisClient.sort(db._getAppWordSetKey(appId), 'by', db._getAppWordKey(appId, '*'), 'limit', 0, 100, 'desc', function(err, results) {
+db.getAppWords = function(appId, options, callback) {
+    var offset = (options && options.offset) ? options.offset : 0;
+    var limit = (options && options.limit) ? options.limit : 500;
+    
+    redisClient.sort(db._getAppWordSetKey(appId), 'by', db._getAppWordHashKey(appId, '*') + '->' + db._getWordHashKeyAppKey(), 'limit', offset, limit, 'desc', function(err, results) {
         if (err) {
             // there is some error, exit asap
             callback(err, results);
@@ -175,63 +202,23 @@ db.getAppWords = function(appId, callback) {
 };
 
 db.getAppWord = function(appId, word, callback) {
-    redisClient.get(db._getAppWordKey(appId, word), function(err, globalCount) {
-        if (!err && globalCount > 0) {
-            // this word actually exists in db
-            var result = {
-                'word': word,
-                'global_count': globalCount,
-                'sections': [],
-            }
-            
-            var sectionKeyPattern = db._getAppWordSectionKey(appId, word, '*');
-            var sectionKeyPatternParts = sectionKeyPattern.split('*');
-            
-            redisClient.keys(sectionKeyPattern, function(err, keys) {
-                if (!err && keys && keys.length > 0) {
-                    // we found some sections with this word
-                    var lastKey = _.last(keys);
-                    _.each(keys, function(key) {
-                        redisClient.get(key, function(err, sectionCount) {
-                            // TODO: improve this
-                            var sectionName = key;
-                            sectionName = sectionName.replace(sectionKeyPatternParts[0], '');
-                            sectionName = sectionName.replace(sectionKeyPatternParts[1], '');
-                            
-                            result.sections.push({
-                                'section_id': sectionName,
-                                'section_count': sectionCount
-                            });
-                            
-                            if (key == lastKey) {
-                                // assuming all redis call return after similar delay
-                                // we will issue callback when the last section is processed
-                                result.sections = _.sortBy(result.sections, function(section) {
-                                    return section.section_id;
-                                }).reverse();
-
-                                callback(err, result);
-                            }
-                        });
-                    })
-                } else {
-                    callback(err, result);
-                }
-            })
+    redisClient.HGETALL(db._getAppWordHashKey(appId, word), function(err, res) {
+        if (!err) {
+            callback(err, res);
         } else {
             callback(err, {});
         }
     });
 }
 
-db.incrAppWord = function(appId, word, sections, callback) {
+db.incrWord = function(appId, word, sections, count, callback) {
     redisClient.sadd(db._getAppWordSetKey(appId), word, function() {
-        redisClient.incr(db._getAppWordKey(appId, word), function() {
+        redisClient.hincrby(db._getAppWordHashKey(appId, word), db._getWordHashKeyAppKey(), count, function() {
             if (sections && sections.length > 0) {
                 // the parent document has some section defined
                 _.each(sections, function(section) {
                     redisClient.sadd(db._getAppSectionWordSetKey(appId, section), word);
-                    redisClient.incr(db._getAppWordSectionKey(appId, word, section));
+                    redisClient.hincrby(db._getAppWordHashKey(appId, word), db._getWordHashKeySectionKey(section), count);
                 })
             }
             
@@ -242,25 +229,12 @@ db.incrAppWord = function(appId, word, sections, callback) {
     });
 };
 
-db._getAppWordSetKey = function(appId) {
-    return util.format('aws_%s', appId);
-}
-
-db._getAppSectionWordSetKey = function(appId, section) {
-    return util.format('astws_%s_%s', appId, section);
-}
-
-db._getAppWordKey = function(appId, word) {
-    return util.format('as_%s_%s', appId, word);
-}
-
-db._getAppWordSectionKey = function(appId, word, section) {
-    return util.format('awst_%s_%s_%s', appId, word, section);
-}
-
 // Sections related...
-db.getAppSection = function(appId, section, callback) {
-    redisClient.sort(db._getAppSectionWordSetKey(appId, section), 'by', db._getAppWordSectionKey(appId, '*', section), 'limit', 0, 100, 'desc', function(err, results) {
+db.getAppSectionWords = function(appId, section, options, callback) {
+    var offset = (options && options.offset) ? options.offset : 0;
+    var limit = (options && options.limit)? options.limit : 500;
+
+    redisClient.sort(db._getAppSectionWordSetKey(appId, section), 'by', db._getAppWordHashKey(appId, '*') + '->' + db._getWordHashKeySectionKey(section), 'limit', offset, limit, 'desc', function(err, results) {
         if (err) {
             // there is some error, exit asap
             callback(err, results);
@@ -269,4 +243,91 @@ db.getAppSection = function(appId, section, callback) {
 
         callback(err, results);
     });
-}
+};
+
+db.findSimilarDocuments_getFingerprint = function(text) {
+    var textPreprocessed = text.replace(/\s+/g, '', text).toLowerCase();
+    var i = 0;
+    var l = text.length;
+    var n = 3;
+    var s = 6;
+    var fingerprint = [];
+
+    while (i < l) {
+        fingerprint.push(text.substr(i, n)); // get n-gram
+        
+        i += s; // go forward
+    }
+
+    return fingerprint;
+};
+
+db.findSimilarDocuments_compareFingerprints = function(fp1, fp2) {
+    var l1 = fp1.length;
+    var l2 = fp2.length;
+    var count = 0;
+
+    if (l1 == 0 || l2 == 0) return 0; // do not compare empty fingerprints
+
+    for (var i1 = 0; i1 < l1; i1++) {
+        for (var i2 = 0; i2 < l2; i2++) {
+            if (fp1[i1] == fp2[i2]) {
+                count++;
+                break; // i2 loop
+            }
+        }
+    }
+
+    return count/l1;
+};
+
+db.findSimilarDocuments = function(appId, text, callback) {
+    var mapf = function() {
+        if (typeof getFingerprint != 'function') {
+            // define the global function getFingerprint
+            eval('getFingerprint = ' + g_getFingerprint);
+        }
+        if (typeof compareFingerprints != 'function') {
+            // define the global function compareFingerprints
+            eval('compareFingerprints = ' + g_compareFingerprints);
+        }
+
+        var fpThis = getFingerprint(this.text);
+        var fpText = getFingerprint(g_text);
+        emit(this._id, compareFingerprints(fpThis, fpText));
+    };
+    var reducef = function(key, values) {
+        // get the first value and return it
+        for (var i in values) {
+            return values[i];
+        }
+    };
+
+    var command = {
+        mapreduce: 'documents',
+        out: {inline: 1},
+        query: {'appId': appId},
+        map: mapf.toString(),
+        reduce: reducef.toString(),
+        scope: {
+            'g_text': text,
+            'g_getFingerprint': db.findSimilarDocuments_getFingerprint.toString(),
+            'g_compareFingerprints': db.findSimilarDocuments_compareFingerprints.toString()
+        }
+    };
+    mongoDb.executeDbCommand(command, function(err, res) {
+        var found = [];
+
+        if (typeof res.documents != 'undefined') {
+            for (var i in res.documents) {
+                if (typeof res.documents[i].results != 'undefined') {
+                    for (var j in res.documents[i].results) {
+                        found.push(res.documents[i].results[j]);
+                    }
+                }
+            }
+        }
+
+        callback(err, found);
+    });
+};

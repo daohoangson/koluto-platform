@@ -15,4 +15,7 @@ exports.config = {
     DB_MYSQL_USER: 'mysql',
     DB_MYSQL_PASSWORD: '123456',
     DB_MYSQL_DATABASE: 'koluto',
-}
+
+    APP_PORT: 29690,
+    APP_DEBUG: true
+};
