@@ -4,7 +4,7 @@ var db = require('./db.js');
 var XML = require('./xml.js');
 var apiData = {
     'version': 1,
-    'responseFormat': 'xml', // possible values: json, jsonp, xml
+    'responseFormat': 'json', // possible values: json, jsonp, xml
     'jsonpCallback': false, // only used with jsonp response format
     
     'appId': 0 // invalid!!!
@@ -14,6 +14,7 @@ api.appId = function() { return apiData.appId; };
 
 api.authenticate = function(req, callback) {
     // validate the response format
+    /*
     if (req.param('_responseFormat')) {
         apiData.responseFormat = req.param('_responseFormat');
     } else if (req.accepts('xml')) {
@@ -21,6 +22,7 @@ api.authenticate = function(req, callback) {
     } else if (req.accepts('json')) {
         apiData.responseFormat = 'json';
     }
+    */
     
     if (apiData.responseFormat == 'json' && req.param('callback')) {
         apiData.responseFormat = 'jsonp';
