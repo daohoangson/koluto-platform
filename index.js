@@ -116,6 +116,8 @@ app.post('/documents', middlewareApiAuth, function(req, res) {
     };
 
     var documentModel = require('./model/document.js');
+    // var startTime = api.time();
+    // console.log('Document length:', newDocument.text.length);
             
     newDocument.words = documentModel.parseText(newDocument.text, {
         maxTokensToMerge: 3,
@@ -133,7 +135,10 @@ app.post('/documents', middlewareApiAuth, function(req, res) {
                 db.incrWord(api.appId(), token, newDocument.sections, counts[token]);
             }
             
-            api.response(res, { 'documentId': document._id });
+            // var elapsed = api.timeDiff(startTime);
+            // console.log('Elapsed time:', elapsed);
+            
+            api.response(res, { '_id': document._id });
         }
     })
 });
@@ -162,10 +167,16 @@ app.get('/similar', middlewareApiAuth, function(req, res) {
 
 app.post('/similar', middlewareApiAuth, function(req, res) {
     var text = req.body.text;
+    
+    // var startTime = api.time();
+    // console.log('Text length:', text.length);
 
     if (text && text.length > 0) {
         db.findSimilarDocuments(api.appId(), text, function(err, documents) {
-            console.log(err);
+            
+            // var elapsed = api.timeDiff(startTime);
+            // console.log('Elapsed time:', elapsed);
+            
             api.response(res, documents);
         });
     } else {

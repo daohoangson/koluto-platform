@@ -101,3 +101,12 @@ api.hashPassword = function(raw) {
 api.now = function() {
     return Math.round(Date.now() / 1000);
 }
+
+api.time = function() {
+    // ugly I now, sorry
+    return Date.now();
+}
+
+api.timeDiff = function(timestamp) {
+    return api.time() - timestamp;
+}

@@ -246,17 +246,46 @@ db.getAppSectionWords = function(appId, section, options, callback) {
 };
 
 db.findSimilarDocuments_getFingerprint = function(text) {
-    var textPreprocessed = text.replace(/\s+/g, '', text).toLowerCase();
+    var textPreprocessed = text.replace(/\s+/g, '');
+    textPreprocessed = textPreprocessed.replace(/[~`!@#$%\^&\*\(\)_=\+\[{\]}\\\|;:'",<.>\/\? …“” •–≤’®©]/g, ''); // pattern copied from tokenizer.js
+    textPreprocessed = textPreprocessed.toLowerCase();
+    
     var i = 0;
-    var l = text.length;
-    var n = 3;
-    var s = 6;
+    var l = textPreprocessed.length;
+    var n = 5; // n as in n-gram
+    var w = 50; // window
     var fingerprint = [];
+    var window = [];
 
     while (i < l) {
-        fingerprint.push(text.substr(i, n)); // get n-gram
+        window.push(textPreprocessed.substr(i, n)); // get n-gram
+        i += 1;
         
-        i += s; // go forward
+        if (window.length >= w || i >= l) {
+            // get the maximum token in window
+            var max = false;
+            var maxVal = 0;
+            for (var wi = 0, wl = window.length; wi < wl; wi++) {
+                var token = window[wi];
+                var tokenVal = 0;
+                for (var ti = 0, tl = token.length; ti < tl; ti++) {
+                    tokenVal += token.charCodeAt(ti);
+                }
+                if (tokenVal > maxVal)
+                {
+                    max = token;
+                    maxVal = tokenVal;
+                }
+            }
+            
+            if (max !== false) {
+                fingerprint.push(max);
+            }
+            
+            // this is the proper way to empty an array
+            // read http://stackoverflow.com/questions/1232040/how-to-empty-an-array-in-javascript
+            window.length = 0;
+        }
     }
 
     return fingerprint;
@@ -293,8 +322,28 @@ db.findSimilarDocuments = function(appId, text, callback) {
         }
 
         var fpThis = getFingerprint(this.text);
-        var fpText = getFingerprint(g_text);
-        emit(this._id, compareFingerprints(fpThis, fpText));
+        
+        if (typeof g_latestText != 'undefined') {
+            // some old job has been run here...
+            if (g_latestText != g_text) {
+                // the old job's text is not this text
+                // we will reset its fingerprint
+                g_fpText = false;
+            }
+        }
+        g_latestText = g_text; // store the latest processed text to check later
+        if (typeof g_fpText == 'undefined' || g_fpText === false) {
+            // calculate the text fingerprint once for each 
+            // computation unit only
+            g_fpText = getFingerprint(g_text);
+        }
+ 
+        var result = compareFingerprints(fpThis, g_fpText);
+        
+        if (result > g_resultThreshold) {
+            // only emit if the result is good enough
+            emit(this._id, {'result': result});
+        }
     };
     var reducef = function(key, values) {
         // get the first value and return it
@@ -312,7 +361,8 @@ db.findSimilarDocuments = function(appId, text, callback) {
         scope: {
             'g_text': text,
             'g_getFingerprint': db.findSimilarDocuments_getFingerprint.toString(),
-            'g_compareFingerprints': db.findSimilarDocuments_compareFingerprints.toString()
+            'g_compareFingerprints': db.findSimilarDocuments_compareFingerprints.toString(),
+            'g_resultThreshold': 0.5
         }
     };
     mongoDb.executeDbCommand(command, function(err, res) {
