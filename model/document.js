@@ -1,7 +1,61 @@
 var documentModel = exports;
 var _ = require('underscore')._;
+var util = require('util');
 var vietntl = require('vietntl');
 var tokenizer = new vietntl.Tokenizer();
+var db = require('../db.js');
+var api = require('../api.js');
+
+documentModel.getDocuments = function(appId, callback) {
+    db.mongoCollections.documents.find({ 'appId': appId }).toArray(function(err, results) {
+        callback(0, results); 
+    });
+};
+
+documentModel.getDocument = function(appId, documentId, callback) {
+    db.mongoCollections.documents.find(
+        {
+            'appId': appId,
+            '_id': new mongodb.ObjectID(documentId)
+        }
+    ).toArray(function(err, results) {
+        if (err) {
+            callback(err);
+            return;
+        }
+
+        callback(0, results[0]);
+    });
+};
+
+documentModel.insertDocument = function(newDocument, callback) {
+    if (!newDocument.created) newDocument.created = api.now();
+    
+    db.mongoCollections.documents.insert(
+        newDocument,
+        { safe: true }, // options
+        function(err, results) {
+            if (err) {
+                callback(err);
+                return;
+            }
+            
+            callback(err, results[0]);
+        }
+    );
+};
+
+documentModel.deleteDocument = function(document, callback) {
+    db.mongoCollections.documents.findAndModify(
+        { '_id': document._id },
+        [], // sort
+        {}, // update
+        { 'remove': true }, // options
+        function(err, result) {
+            callback(err);
+        }
+    );
+};
 
 documentModel.countTokens = function(tokens) {
     var counts = {};

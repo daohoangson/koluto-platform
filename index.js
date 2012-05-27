@@ -3,7 +3,9 @@ var express = require('express');
 var app = express.createServer();
 var config = require('./config.js').config;
 var api = require('./api.js');
-var db = require('./db.js');
+var userModel = require('./model/user.js');
+var documentModel = require('./model/document.js');
+var wordModel = require('./model/word.js');
 
 app.configure(function() {
     app.use(express.logger({ format: ':method :url :req[Accept]' }));
@@ -67,7 +69,7 @@ app.post('/users', middlewareApiNoAuth, function(req, res) {
     if (!userName || !password) {
         api.responseError(res, '`Username` and `password` are all required, `email` is optional though...')
     } else {
-        db.getUserByUserName(userName, function(err, user) {
+        userModel.getUserByUserName(userName, function(err, user) {
             if (user) {
                 api.responseError(res, 'Existing user found with specified username, forgot your password? (Tough luck for now, sorry)');
             } else {
@@ -77,7 +79,7 @@ app.post('/users', middlewareApiNoAuth, function(req, res) {
                     'email': email
                 };
 
-                db.insertUser(newUser, function(err, appId) {
+                userModel.insertUser(newUser, function(err, appId) {
                     if (err || !appId) {
                         api.responseError(res, 'Unable to register new user');
                     } else {
@@ -90,7 +92,7 @@ app.post('/users', middlewareApiNoAuth, function(req, res) {
 })
 
 app.get('/documents', middlewareApiAuth, function(req, res) {
-    db.getDocuments(api.appId(), function(err, documents) {
+    documentModel.getDocuments(api.appId(), function(err, documents) {
         if (err) {
             api.responseError(res, 'Unable to get documents');
         } else {
@@ -115,24 +117,32 @@ app.post('/documents', middlewareApiAuth, function(req, res) {
         'sections': req.body.sections
     };
 
-    var documentModel = require('./model/document.js');
     // var startTime = api.time();
     // console.log('Document length:', newDocument.text.length);
             
     newDocument.words = documentModel.parseText(newDocument.text, {
         maxTokensToMerge: 3,
+        /*
         // keepMergedOnly: true, -- we should keep them, irrelevant tokens are removed by smart filters
         tryToBeSmart: 1
+        */
+        keepMergedOnly: true, // play it dump, we need more speed!
     });
 
-    db.insertDocument(newDocument, function(err, document) {
+    documentModel.insertDocument(newDocument, function(err, document) {
         if (err) {
             api.responseError(res, 'Unable to insert document');
         } else {
             var counts = documentModel.countTokens(newDocument.words);
             
             for (var token in counts) {
-                db.incrWord(api.appId(), token, newDocument.sections, counts[token]);
+                if (counts[token] < 2) {
+                    // do not process single instance tokens
+                    // we need more speed!
+                    continue;
+                }
+                
+                wordModel.incrWord(api.appId(), token, newDocument.sections, counts[token]);
             }
             
             // var elapsed = api.timeDiff(startTime);
@@ -144,13 +154,13 @@ app.post('/documents', middlewareApiAuth, function(req, res) {
 });
 
 app.del('/documents/:documentId', middlewareApiAuth, function(req, res) {
-    db.getDocument(api.appId(), req.params.documentId, function(err, document) {
+    documentModel.getDocument(api.appId(), req.params.documentId, function(err, document) {
         if (err || !document) {
             api.responseError(res, 'The requested document could not be found', 404);
         } else if (document.appId != api.appId()) {
             api.responseNoPermission(res);
         } else {
-            db.deleteDocument(document, function(err) {
+            documentModel.deleteDocument(document, function(err) {
                 if (err) {
                     api.responseError(res, 'The requested document could not be deleted');
                 } else {
@@ -187,13 +197,13 @@ app.post('/similar', middlewareApiAuth, function(req, res) {
 app.get('/words', middlewareApiAuth, function(req, res) {
     var options = req.query['options'];
 
-    db.getAppWords(api.appId(), options, function(err, results) {
+    wordModel.getAppWords(api.appId(), options, function(err, results) {
         api.response(res, { 'words': results });
     });
 });
 
 app.get('/words/:word', middlewareApiAuth, function(req, res) {
-    db.getAppWord(api.appId(), req.params.word, function(err, word) {
+    wordModel.getAppWord(api.appId(), req.params.word, function(err, word) {
         api.response(res, { 'word': word });
     });
 });
@@ -202,10 +212,10 @@ app.get('/sections/:section', middlewareApiAuth, function(req, res) {
     var filterAppWords = req.query['filterAppWords'];
     var options = req.query['options'];
 
-    db.getAppSectionWords(api.appId(), req.params.section, options, function(err, sectionWords) {
+    wordModel.getAppSectionWords(api.appId(), req.params.section, options, function(err, sectionWords) {
         if (!!filterAppWords) {
             // get app words then filter them out from the section words
-            db.getAppWords(api.appId(), options, function(err, appWords) {
+            wordModel.getAppWords(api.appId(), options, function(err, appWords) {
                 var wordsFiltered = sectionWords;
                 if (!err) {
                     wordsFiltered = _.difference(wordsFiltered, appWords);

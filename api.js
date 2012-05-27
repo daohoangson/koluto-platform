@@ -1,6 +1,7 @@
 var api = exports;
 var config = require('./config.js').config;
 var db = require('./db.js');
+var userModel = require('./model/user.js');
 var XML = require('./xml.js');
 var apiData = {
     'version': 1,
@@ -14,15 +15,13 @@ api.appId = function() { return apiData.appId; };
 
 api.authenticate = function(req, callback) {
     // validate the response format
-    /*
     if (req.param('_responseFormat')) {
         apiData.responseFormat = req.param('_responseFormat');
-    } else if (req.accepts('xml')) {
-        apiData.responseFormat = 'xml';
     } else if (req.accepts('json')) {
         apiData.responseFormat = 'json';
+    } else if (req.accepts('xml')) {
+        apiData.responseFormat = 'xml';
     }
-    */
     
     if (apiData.responseFormat == 'json' && req.param('callback')) {
         apiData.responseFormat = 'jsonp';
@@ -40,7 +39,7 @@ api.authenticate = function(req, callback) {
                 if (parts.length == 2) {
                     // we now have username and password
                     // trigger a database query, notice the extra else branch with callback()?
-                    db.getUserByUserName(parts[0], function(err, user) {
+                    userModel.getUserByUserName(parts[0], function(err, user) {
                         if (!err && user) {
                             if (user.password == api.hashPassword(parts[1])) {
                                 apiData.appId = user.app_id;
