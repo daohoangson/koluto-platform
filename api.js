@@ -1,9 +1,10 @@
 var api = exports;
+var _ = require('underscore')._;
 var config = require('./config.js').config;
 var db = require('./db.js');
 var userModel = require('./model/user.js');
 var XML = require('./xml.js');
-var apiData = {
+var apiDataDefault = {
     'version': 1,
     'responseFormat': 'json', // possible values: json, jsonp, xml
     'jsonpCallback': false, // only used with jsonp response format
@@ -11,9 +12,12 @@ var apiData = {
     'appId': 0 // invalid!!!
 };
 
-api.appId = function() { return apiData.appId; };
+api.appId = function(req) { return req.apiData.appId; };
 
 api.authenticate = function(req, callback) {
+    req.apiData = _.clone(apiDataDefault);
+    var apiData = req.apiData; // shorthand
+    
     // validate the response format
     if (req.param('_responseFormat')) {
         apiData.responseFormat = req.param('_responseFormat');
@@ -60,8 +64,8 @@ api.authenticate = function(req, callback) {
     callback();
 };
 
-api.response = function(res, data) {
-    switch (apiData.responseFormat) {
+api.response = function(req, res, data) {
+    switch (req.apiData.responseFormat) {
     case 'xml':
         res.header('Content-Type', 'text/xml');
         res.write(XML.stringify(data));
@@ -81,16 +85,16 @@ api.response = function(res, data) {
     }
 };
 
-api.responseError = function(res, errMessage, httpStatusCode) {
+api.responseError = function(req, res, errMessage, httpStatusCode) {
     if (httpStatusCode) {
         res.statusCode = httpStatusCode;
     }
     
-    api.response(res, { 'error': errMessage });
+    api.response(req, res, { 'error': errMessage });
 }
 
-api.responseNoPermission = function(res) {
-    api.responseError(res, 'You don\'t have permission to access this resource', 403);
+api.responseNoPermission = function(req, res) {
+    api.responseError(req, res, 'You don\'t have permission to access this resource', 403);
 }
 
 api.hashPassword = function(raw) {

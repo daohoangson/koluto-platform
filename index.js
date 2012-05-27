@@ -32,10 +32,10 @@ app.configure('production', function() {
 
 var middlewareApiAuth = function(req, res, next) {
     api.authenticate(req, function(errCode, errMessage) {
-        if (api.appId() == 0) {
+        if (api.appId(req) == 0) {
             res.statusCode = 401;
             res.header('WWW-Authenticate', 'Basic realm="' + config.G_NAME + '"');
-            api.responseError(res, 'Authentication required');
+            api.responseError(req, res, 'Authentication required');
         } else {
             next();
         }
@@ -47,7 +47,7 @@ var middlewareApiNoAuth = function(req, res, next) {
 }
 
 app.get('/', middlewareApiNoAuth, function(req, res, next) {
-   api.response(res, {
+   api.response(req, res, {
        'links': [
             '/users',
             '/documents',
@@ -58,7 +58,7 @@ app.get('/', middlewareApiNoAuth, function(req, res, next) {
 });
 
 app.get('/users', middlewareApiNoAuth, function(req, res) {
-   api.responseError(res, 'POST with `username`, `password` and `email` to create an account', 404);
+   api.responseError(req, res, 'POST with `username`, `password` and `email` to create an account', 404);
 });
 
 app.post('/users', middlewareApiNoAuth, function(req, res) {
@@ -67,11 +67,11 @@ app.post('/users', middlewareApiNoAuth, function(req, res) {
     var email = req.body.email;
     
     if (!userName || !password) {
-        api.responseError(res, '`Username` and `password` are all required, `email` is optional though...')
+        api.responseError(req, res, '`Username` and `password` are all required, `email` is optional though...')
     } else {
         userModel.getUserByUserName(userName, function(err, user) {
             if (user) {
-                api.responseError(res, 'Existing user found with specified username, forgot your password? (Tough luck for now, sorry)');
+                api.responseError(req, res, 'Existing user found with specified username, forgot your password? (Tough luck for now, sorry)');
             } else {
                 var newUser = {
                     'username': userName,
@@ -81,9 +81,9 @@ app.post('/users', middlewareApiNoAuth, function(req, res) {
 
                 userModel.insertUser(newUser, function(err, appId) {
                     if (err || !appId) {
-                        api.responseError(res, 'Unable to register new user');
+                        api.responseError(req, res, 'Unable to register new user');
                     } else {
-                        api.response(res, { 'app_id': appId });
+                        api.response(req, res, { 'app_id': appId });
                     }
                 });
             }
@@ -92,9 +92,9 @@ app.post('/users', middlewareApiNoAuth, function(req, res) {
 })
 
 app.get('/documents', middlewareApiAuth, function(req, res) {
-    documentModel.getDocuments(api.appId(), function(err, documents) {
+    documentModel.getDocuments(api.appId(req), function(err, documents) {
         if (err) {
-            api.responseError(res, 'Unable to get documents');
+            api.responseError(req, res, 'Unable to get documents');
         } else {
             if (config.APP_DEBUG) {
                 for (var i in documents) {
@@ -104,14 +104,14 @@ app.get('/documents', middlewareApiAuth, function(req, res) {
                 }
             };
 
-            api.response(res, { 'documents': documents });
+            api.response(req, res, { 'documents': documents });
         }
     });
 });
 
 app.post('/documents', middlewareApiAuth, function(req, res) {
     var newDocument = {
-        'appId': api.appId(),
+        'appId': api.appId(req),
         'text': req.body.text,
         'extraData': req.body.extraData,
         'sections': req.body.sections
@@ -131,7 +131,7 @@ app.post('/documents', middlewareApiAuth, function(req, res) {
 
     documentModel.insertDocument(newDocument, function(err, document) {
         if (err) {
-            api.responseError(res, 'Unable to insert document');
+            api.responseError(req, res, 'Unable to insert document');
         } else {
             var counts = documentModel.countTokens(newDocument.words);
             
@@ -142,29 +142,29 @@ app.post('/documents', middlewareApiAuth, function(req, res) {
                     continue;
                 }
                 
-                wordModel.incrWord(api.appId(), token, newDocument.sections, counts[token]);
+                wordModel.incrWord(api.appId(req), token, newDocument.sections, counts[token]);
             }
             
             // var elapsed = api.timeDiff(startTime);
             // console.log('Elapsed time:', elapsed);
             
-            api.response(res, { '_id': document._id });
+            api.response(req, res, { '_id': document._id });
         }
     })
 });
 
 app.del('/documents/:documentId', middlewareApiAuth, function(req, res) {
-    documentModel.getDocument(api.appId(), req.params.documentId, function(err, document) {
+    documentModel.getDocument(api.appId(req), req.params.documentId, function(err, document) {
         if (err || !document) {
-            api.responseError(res, 'The requested document could not be found', 404);
-        } else if (document.appId != api.appId()) {
-            api.responseNoPermission(res);
+            api.responseError(req, res, 'The requested document could not be found', 404);
+        } else if (document.appId != api.appId(req)) {
+            api.responseNoPermission(req, res);
         } else {
             documentModel.deleteDocument(document, function(err) {
                 if (err) {
-                    api.responseError(res, 'The requested document could not be deleted');
+                    api.responseError(req, res, 'The requested document could not be deleted');
                 } else {
-                    api.response(res, { 'document': document, 'deleted': 1 });
+                    api.response(req, res, { 'document': document, 'deleted': 1 });
                 }
             });
         }
@@ -172,7 +172,7 @@ app.del('/documents/:documentId', middlewareApiAuth, function(req, res) {
 });
 
 app.get('/similar', middlewareApiAuth, function(req, res) {
-    api.responseError(res, 'POST with `text` to find similar documents', 404);
+    api.responseError(req, res, 'POST with `text` to find similar documents', 404);
 });
 
 app.post('/similar', middlewareApiAuth, function(req, res) {
@@ -182,29 +182,29 @@ app.post('/similar', middlewareApiAuth, function(req, res) {
     // console.log('Text length:', text.length);
 
     if (text && text.length > 0) {
-        db.findSimilarDocuments(api.appId(), text, function(err, documents) {
+        db.findSimilarDocuments(api.appId(req), text, function(err, documents) {
             
             // var elapsed = api.timeDiff(startTime);
             // console.log('Elapsed time:', elapsed);
             
-            api.response(res, documents);
+            api.response(req, res, documents);
         });
     } else {
-        api.responseError(res, '`text` is required for similar search', 500);
+        api.responseError(req, res, '`text` is required for similar search', 500);
     }
 });
 
 app.get('/words', middlewareApiAuth, function(req, res) {
     var options = req.query['options'];
 
-    wordModel.getAppWords(api.appId(), options, function(err, results) {
-        api.response(res, { 'words': results });
+    wordModel.getAppWords(api.appId(req), options, function(err, results) {
+        api.response(req, res, { 'words': results });
     });
 });
 
 app.get('/words/:word', middlewareApiAuth, function(req, res) {
-    wordModel.getAppWord(api.appId(), req.params.word, function(err, word) {
-        api.response(res, { 'word': word });
+    wordModel.getAppWord(api.appId(req), req.params.word, function(err, word) {
+        api.response(req, res, { 'word': word });
     });
 });
 
@@ -212,19 +212,19 @@ app.get('/sections/:section', middlewareApiAuth, function(req, res) {
     var filterAppWords = req.query['filterAppWords'];
     var options = req.query['options'];
 
-    wordModel.getAppSectionWords(api.appId(), req.params.section, options, function(err, sectionWords) {
+    wordModel.getAppSectionWords(api.appId(req), req.params.section, options, function(err, sectionWords) {
         if (!!filterAppWords) {
             // get app words then filter them out from the section words
-            wordModel.getAppWords(api.appId(), options, function(err, appWords) {
+            wordModel.getAppWords(api.appId(req), options, function(err, appWords) {
                 var wordsFiltered = sectionWords;
                 if (!err) {
                     wordsFiltered = _.difference(wordsFiltered, appWords);
                 }
-                api.response(res, { 'section': { 'wordsFiltered' : wordsFiltered } });
+                api.response(req, res, { 'section': { 'wordsFiltered' : wordsFiltered } });
             });
         } else {
             // return the list of words immediately
-            api.response(res, { 'section': { 'words' : sectionWords } });
+            api.response(req, res, { 'section': { 'words' : sectionWords } });
         }
     });
 });
