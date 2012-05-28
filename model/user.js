@@ -1,6 +1,7 @@
 var userModel = exports;
 var _ = require('underscore')._;
 var util = require('util');
+var api = require('../api.js');
 var db = require('../db.js');
 
 userModel.getUserByUserName = function(userName, callback) {
