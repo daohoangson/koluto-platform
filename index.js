@@ -6,6 +6,7 @@ var api = require('./api.js');
 var userModel = require('./model/user.js');
 var documentModel = require('./model/document.js');
 var wordModel = require('./model/word.js');
+var similarModel = require('./model/similar.js');
 
 app.configure(function() {
     app.use(express.logger({ format: ':method :url :req[Accept]' }));
@@ -127,6 +128,7 @@ app.post('/documents', middlewareApiAuth, function(req, res) {
         tryToBeSmart: 1
         */
         keepMergedOnly: true, // play it dump, we need more speed!
+        tryToBeSmart: 1
     });
 
     documentModel.insertDocument(newDocument, function(err, document) {
@@ -182,7 +184,7 @@ app.post('/similar', middlewareApiAuth, function(req, res) {
     // console.log('Text length:', text.length);
 
     if (text && text.length > 0) {
-        db.findSimilarDocuments(api.appId(req), text, function(err, documents) {
+        similarModel.findSimilarDocuments(api.appId(req), text, function(err, documents) {
             
             // var elapsed = api.timeDiff(startTime);
             // console.log('Elapsed time:', elapsed);
@@ -191,6 +193,23 @@ app.post('/similar', middlewareApiAuth, function(req, res) {
         });
     } else {
         api.responseError(req, res, '`text` is required for similar search', 500);
+    }
+});
+
+app.get('/search', middlewareApiAuth, function(req, res) {
+    api.responseError(req, res, 'POST with `words` to search for documents with those words', 404);
+});
+
+app.post('/search', middlewareApiAuth, function(req, res) {
+    var sections = req.body.sections;
+    var words = req.body.words;
+
+    if (words && words.length > 0) {
+        documentModel.search(api.appId(req), sections, words, function(err, documents) {
+            api.response(req, res, documents);
+        });
+    } else {
+        api.responseError(req, res, '`words` is required search', 500);
     }
 });
 

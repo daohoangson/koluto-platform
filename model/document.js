@@ -326,3 +326,102 @@ documentModel._removeCompoundTokens = function(tokens)
 
     return _.difference(tokens, compoundTokens);
 }
+
+documentModel.search = function(appId, sections, words, callback) {
+    var mapf = function() {
+        var wordsFound = [];
+        var result = 0;
+        
+        if (g_sections && g_sections.length > 0) {
+            // some sections are specified
+            var sectionFound = false;
+            
+            for (var i in g_sections) {
+                for (var j in this.sections) {
+                    if (g_sections[i] == this.sections[j]) {
+                        sectionFound = true;
+                        break; // for (var j in this.sections)
+                    }
+                }
+                
+                if (sectionFound) {
+                    break; // for (var i in g_sections)
+                }
+            }
+            
+            if (!sectionFound) {
+                // no section matched
+                // skip!
+                return;
+            }
+        }
+
+        for (var i in g_words) {
+            var found = false;
+            for (var j in this.words) {
+                if (g_words[i] == this.words[j]) {
+                    found = true;
+                    break; // for (var j in this.words)
+                }
+            }
+            
+            if (found) {
+                wordsFound.push(g_words[i]);
+                // break; // for (var i in g_words)
+            }
+        }
+        
+        if (g_words.length > 0) {
+            result = wordsFound.length / g_words.length;
+        }
+        
+        //if (result > g_resultThreshold) {
+        if (wordsFound.length > 0) {
+            emit(this._id, {'result': result, 'words': wordsFound});
+        }
+    };
+    var reducef = function(key, values) {
+        // get the first value and return it
+        for (var i in values) {
+            return values[i];
+        }
+    };
+
+    var command = {
+        mapreduce: 'documents',
+        out: {inline: 1},
+        query: {'appId': appId},
+        map: mapf.toString(),
+        reduce: reducef.toString(),
+        scope: {
+            'g_sections': sections,
+            'g_words': words,
+            'g_resultThreshold': 0.2
+        }
+    };
+    
+    db.mongoDb.executeDbCommand(command, function(err, res) {
+        var found = [];
+
+        if (typeof res.documents != 'undefined') {
+            for (var i in res.documents) {
+                if (typeof res.documents[i].results != 'undefined') {
+                    for (var j in res.documents[i].results) {
+                        found.push(res.documents[i].results[j]);
+                    }
+                }
+            }
+        }
+        
+        found = _.sortBy(found, function(record) {
+            return 1 - record.value.result;
+        });
+        
+        if (found.length > 50) {
+            // TODO: not hardcode 5
+            found = found.slice(0, 50);
+        }
+
+        callback(err, found);
+    });
+};
