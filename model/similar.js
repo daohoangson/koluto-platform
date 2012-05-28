@@ -68,8 +68,32 @@ similarModel.findSimilarDocuments_compareFingerprints = function(fp1, fp2) {
     return count/l1;
 };
 
-similarModel.findSimilarDocuments = function(appId, text, callback) {
+similarModel.findSimilarDocuments = function(appId, sections, text, callback) {
     var mapf = function() {
+        if (g_sections && g_sections.length > 0) {
+            // some sections are specified
+            var sectionFound = false;
+            
+            for (var i in g_sections) {
+                for (var j in this.sections) {
+                    if (g_sections[i] == this.sections[j]) {
+                        sectionFound = true;
+                        break; // for (var j in this.sections)
+                    }
+                }
+                
+                if (sectionFound) {
+                    break; // for (var i in g_sections)
+                }
+            }
+            
+            if (!sectionFound) {
+                // no section matched
+                // skip!
+                return;
+            }
+        }
+        
         if (typeof getFingerprint != 'function') {
             // define the global function getFingerprint
             eval('getFingerprint = ' + g_getFingerprint);
@@ -117,6 +141,7 @@ similarModel.findSimilarDocuments = function(appId, text, callback) {
         map: mapf.toString(),
         reduce: reducef.toString(),
         scope: {
+            'g_sections': sections,
             'g_text': text,
             'g_getFingerprint': similarModel.findSimilarDocuments_getFingerprint.toString(),
             'g_compareFingerprints': similarModel.findSimilarDocuments_compareFingerprints.toString(),

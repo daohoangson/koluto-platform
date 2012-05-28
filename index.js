@@ -178,13 +178,14 @@ app.get('/similar', middlewareApiAuth, function(req, res) {
 });
 
 app.post('/similar', middlewareApiAuth, function(req, res) {
+    var sections = req.body.sections;
     var text = req.body.text;
     
     // var startTime = api.time();
     // console.log('Text length:', text.length);
 
     if (text && text.length > 0) {
-        similarModel.findSimilarDocuments(api.appId(req), text, function(err, documents) {
+        similarModel.findSimilarDocuments(api.appId(req), sections, text, function(err, documents) {
             
             // var elapsed = api.timeDiff(startTime);
             // console.log('Elapsed time:', elapsed);

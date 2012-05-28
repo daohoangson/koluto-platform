@@ -213,9 +213,8 @@ documentModel._removeIrrelevantTokens = function(text, tokens, thresholdPercenta
     _.each(tokens, function(token) {
         if (!_.include(irrelevantTokens, token)) {
             var tokensThatContainIt = [];
-            var tokensThatContainItMerged = [];
-            var tokensThatContainItMergedPositions = [];
             var tokensThatContainItManyTime = [];
+            var tokenCount = 0, offset, offset_tmp;
             var requiredCount = 0;
 
             // find all tokens that contain our token
@@ -225,65 +224,42 @@ documentModel._removeIrrelevantTokens = function(text, tokens, thresholdPercenta
                     tokensThatContainIt.push(token2);
                 }
             });
-
-            // look for the tokensThatContainIt in the text
-            // and try to merge them if possible
-            // the loop is simple because all the time, our tokens will
-            // be in the form of "AAA BBB CCC" and "BBB CCC DDD"
-            // we also assume these tokens will be unique in the textå
-            _.each(tokensThatContainIt, function(token2) {
-                var offset = 0;
-                while (true) {
-                    var startPos = text.indexOf(token2, offset);
-                    if (startPos == -1) break; // while (true)
-                    offset = startPos + 1;
-                    
-                    var isMerged = false;
-                    _.each(tokensThatContainItMergedPositions, function(positions) {
-                        if (startPos >= positions[0] && startPos < positions[1]) {
-                            isMerged = true;
-                        }
-                    });
-                    
-                    if (!isMerged) {
-                        var endPos = startPos + token2.length;
-
-                        _.each(tokensThatContainIt, function(token3) {
-                            if (token3 != token2) {
-                                var token3StartPos = text.indexOf(token3, startPos);
-                                var token3EndPos = token3StartPos + token3.length;
-                                if (token3StartPos >= startPos && token3StartPos <= endPos) {
-                                    // overlapped, token2 contains part of token3
-                                    endPos = token3StartPos + token3.length;
-                                } else if (startPos >= token3StartPos && startPos <= token3EndPos) {
-                                    // overlapped too, but token3 contains part of token2
-                                    startPos = token3StartPos;
-                                }
-                            }
-                        });
-
-                        tokensThatContainItMergedPositions.push([startPos, endPos]);
-                        tokensThatContainItMerged.push(text.substr(startPos, endPos - startPos));
-                    }
+            
+            offset = 0;
+            while (true) {
+                offset_tmp = text.indexOf(token, offset);
+                if (offset_tmp != -1) {
+                    // found the token
+                    offset = offset_tmp + 1;
+                    tokenCount++;
+                } else {
+                    break; // while (true)
                 }
-            });
+            }
 
-            if (tokensThatContainItMerged.length > 1) {
+            if (tokensThatContainIt.length > 1) {
                 // test all tokensThatContainIt to find the one that happen in more than 
                 // threshold percent of tokensThatContainItMerged
                 // only do this if we found more than 1 tokensThatContainItMerged
-                requiredCount = tokensThatContainItMerged.length * thresholdPercentage / 100;
+                requiredCount = tokenCount * thresholdPercentage / 100;
 
                 _.each(tokensThatContainIt, function(token2) {
                     if (!_.include(tokensThatContainItManyTime, token2)) {
-                        var count = 0;
-                        _.each(tokensThatContainItMerged, function(token3) {
-                            if (token3.indexOf(token2) != -1) {
-                                count++;
+                        var token2Count = 0;
+                        
+                        offset = 0;
+                        while (true) {
+                            offset_tmp = text.indexOf(token2, offset);
+                            if (offset_tmp != -1) {
+                                // found the token2
+                                offset = offset_tmp + 1;
+                                token2Count++;
+                            } else {
+                                break; // while (true)
                             }
-                        });
-
-                        if (count > 1 && count >= requiredCount) {
+                        }
+                        
+                        if (token2Count > 1 && token2Count >= requiredCount) {
                             tokensThatContainItManyTime.push(token2);
                         }
                     }
