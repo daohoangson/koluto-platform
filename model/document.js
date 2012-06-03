@@ -3,16 +3,18 @@ var _ = require('underscore')._;
 var util = require('util');
 var vietntl = require('vietntl');
 var tokenizer = new vietntl.Tokenizer();
-var db = require('../db.js');
-var api = require('../api.js');
 
 documentModel.getDocuments = function(appId, callback) {
+    var db = require('../db.js');
+    
     db.mongoCollections.documents.find({ 'appId': appId }).toArray(function(err, results) {
         callback(0, results); 
     });
 };
 
 documentModel.getDocument = function(appId, documentId, callback) {
+    var db = require('../db.js');
+    
     db.mongoCollections.documents.find(
         {
             'appId': appId,
@@ -29,6 +31,9 @@ documentModel.getDocument = function(appId, documentId, callback) {
 };
 
 documentModel.insertDocument = function(newDocument, callback) {
+    var db = require('../db.js');
+    var api = require('../api.js');
+    
     if (!newDocument.created) newDocument.created = api.now();
     
     db.mongoCollections.documents.insert(
@@ -46,6 +51,8 @@ documentModel.insertDocument = function(newDocument, callback) {
 };
 
 documentModel.deleteDocument = function(document, callback) {
+    var db = require('../db.js');
+
     db.mongoCollections.documents.findAndModify(
         { '_id': document._id },
         [], // sort
@@ -102,13 +109,10 @@ documentModel.parseText = function(text, options) {
     var options = options || {};
     _.defaults(options, defaultOptions);
     
-    // convert to lowercase
-    text = text.toLowerCase();
-    // replace multiple spaces with one space
-    text = text.replace(/\s+/g, ' ');
-    
-    var tokens = tokenizer.tokenize(text);
-    
+    var tokenized = tokenizer.tokenize(text);
+    var tokens = tokenized.tokens;
+    text = tokenizer.normalize(text);
+
     // merge tokens to form new tokens
     if (options.maxTokensToMerge > 1) {
         var newTokens = documentModel._mergeTokens(
@@ -120,7 +124,8 @@ documentModel.parseText = function(text, options) {
         
         if (options.keepMergedOnly) {
             // ignore original tokens
-            options.ignoredList = options.ignoredList.concat(tokens);
+            // without the special ones
+            options.ignoredList = options.ignoredList.concat(_.difference(tokens, tokenized.special));
         }
         
         tokens = tokens.concat(newTokens);
@@ -137,7 +142,7 @@ documentModel.parseText = function(text, options) {
         tokens = _.difference(tokens, options.ignoredList);
     }
     
-    return tokens
+    return tokens;
 };
 
 documentModel._mergeTokens = function(text, tokens, max) {
@@ -304,6 +309,8 @@ documentModel._removeCompoundTokens = function(tokens)
 }
 
 documentModel.search = function(appId, sections, words, callback) {
+    var db = require('../db.js');
+
     var mapf = function() {
         var wordsFound = [];
         var result = 0;

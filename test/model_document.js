@@ -46,7 +46,7 @@ exports['test DocumentModel#parseText/mixed'] = function(beforeEnd, assert) {
 
 exports['test DocumentModel#parseText/smart'] = function(beforeEnd, assert) {
     var options = {
-        maxTokensToMerge: 5,
+        maxTokensToMerge: 3,
         keepMergedOnly: true,
         tryToBeSmart: 1
     };
@@ -80,6 +80,47 @@ exports['test DocumentModel#parseText/smart'] = function(beforeEnd, assert) {
     là việc làm hết sức cần thiết, nhất là khi Tết Nguyên đán đang đến, nhu cầu các loại thực phẩm của \
     người dân đang tăng cao. Có vậy mới góp phần hạn chế tình trạng ngộ độc thực phẩm cũng như phòng ngừa\
     được các bệnh mãn tính.', options);
+
+    assert.includes(tokens, 'chất phụ gia');
+    assert.includes(tokens, 'bộ y tế');
+    assert.includes(tokens, '15,6%');
+    assert.includes(tokens, 'thực phẩm');
+    assert.includes(tokens, 'rhodamine b');
+    assert.includes(tokens, 'tết nguyên đán');
+}
+
+exports['test DocumentModel#parseText/names'] = function(beforeEnd, assert) {
+    var tokens = documentModel.parseText('hello Jacky Chan', { ignoredList:[] });
+    assert.equal(2, tokens.length);
     
-    assert.equal(1, 1);
+    tokens = documentModel.parseText('Hello Jacky Chan', { ignoredList:[] });
+    assert.equal(2, tokens.length);
+    
+    tokens = documentModel.parseText('Jacky Chan is the best!', { ignoredList:[] });
+    assert.equal(5, tokens.length);
+}
+
+exports['test DocumentModel#parseText/numbers'] = function(beforeEnd, assert) {
+    var tokens = documentModel.parseText('12 is twelve', { ignoredList:[] });
+    assert.equal(3, tokens.length);
+    
+    tokens = documentModel.parseText('twelve equals 12', { ignoredList:[] });
+    assert.equal(3, tokens.length);
+    
+    tokens = documentModel.parseText('120,000 is pretty big', { ignoredList:[] });
+    assert.equal(4, tokens.length);
+    assert.equal('120000', tokens[0]);
+    
+    tokens = documentModel.parseText('120 tỉ đồng is a LOT of money!', { ignoredList:[] });
+    assert.equal(6, tokens.length);
+    
+    tokens = documentModel.parseText('12    nghìn    tỉ    đồng', { ignoredList:[] });
+    assert.equal(1, tokens.length);
+    assert.equal('12 nghìn tỉ đồng', tokens[0]);
+    
+    tokens = documentModel.parseText('12 vạn hécta', { ignoredList:[] });
+    assert.equal(2, tokens.length);
+
+    tokens = documentModel.parseText('9 tháng 10 ngày', { ignoredList:[] });
+    assert.equal(2, tokens.length);
 }
