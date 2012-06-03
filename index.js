@@ -144,7 +144,11 @@ app.post('/documents', middlewareApiAuth, function(req, res) {
                     continue;
                 }
                 
-                wordModel.incrWord(api.appId(req), token, newDocument.sections, counts[token]);
+                // sondh@2012-06-03
+                // changed from increase with the count of each word
+                // to increase 1 only if the word appear
+                // wordModel.incrWord(api.appId(req), token, newDocument.sections, counts[token]);
+                wordModel.incrWord(api.appId(req), token, newDocument.sections, 1);
             }
             
             // var elapsed = api.timeDiff(startTime);
