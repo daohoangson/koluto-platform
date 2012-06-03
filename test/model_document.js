@@ -109,7 +109,7 @@ exports['test DocumentModel#parseText/numbers'] = function(beforeEnd, assert) {
     
     tokens = documentModel.parseText('120,000 is pretty big', { ignoredList:[] });
     assert.equal(4, tokens.length);
-    assert.equal('120000', tokens[0]);
+    assert.equal('120,000', tokens[0]);
     
     tokens = documentModel.parseText('120 tỉ đồng is a LOT of money!', { ignoredList:[] });
     assert.equal(6, tokens.length);
