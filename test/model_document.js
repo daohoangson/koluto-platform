@@ -102,9 +102,9 @@ exports['test DocumentModel#parseText/names'] = function(beforeEnd, assert) {
 
 exports['test DocumentModel#parseText/numbers'] = function(beforeEnd, assert) {
     var tokens = documentModel.parseText('12 is twelve', { ignoredList:[] });
-    assert.equal(3, tokens.length);
+    assert.equal(2, tokens.length);
     
-    tokens = documentModel.parseText('twelve equals 12', { ignoredList:[] });
+    tokens = documentModel.parseText('one-hundred-and-one equals 101', { ignoredList:[] });
     assert.equal(3, tokens.length);
     
     tokens = documentModel.parseText('120,000 is pretty big', { ignoredList:[] });
