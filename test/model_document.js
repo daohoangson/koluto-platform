@@ -12,11 +12,9 @@ exports['test DocumentModel#parseText/longer'] = function(beforeEnd, assert) {
 
 exports['test DocumentModel#parseText/vietnamese cases'] = function(beforeEnd, assert) {
     var tokens = documentModel.parseText('Thử nghiệm với TIẾNG VIỆT VIẾT HOA. Đàn bò con trâu!', {ignoredList:[]});
-    assert.equal(11, tokens.length);
-    assert.equal('tiếng', tokens[3]);
-    assert.equal('việt', tokens[4]);
-    assert.equal('viết', tokens[5]);
-    assert.equal('đàn', tokens[7]);
+    assert.equal(8, tokens.length);
+    assert.includes(tokens, 'tiếng việt viết hoa');
+    assert.includes(tokens, 'đàn');
 }
 
 exports['test DocumentModel#parseText/merge2'] = function(beforeEnd, assert) {
@@ -45,11 +43,6 @@ exports['test DocumentModel#parseText/mixed'] = function(beforeEnd, assert) {
 }
 
 exports['test DocumentModel#parseText/smart'] = function(beforeEnd, assert) {
-    var options = {
-        maxTokensToMerge: 3,
-        keepMergedOnly: true,
-        tryToBeSmart: 1
-    };
     var tokens = documentModel.parseText('Các vụ ngộ độc do sử dụng các chất phụ gia gây ra có chiều hướng gia \
     tăng. Bộ Y tế cho biết, tình trạng vi phạm khi cố tình sử dụng phụ gia không thuộc danh mục còn diễn ra khá \
     phổ biến. Tại các tỉnh phía bắc, nhiều mẫu thực phẩm có chứa Rhodamine B với hàm lượng cao; nhiều mẫu thực phẩm\
@@ -79,7 +72,11 @@ exports['test DocumentModel#parseText/smart'] = function(beforeEnd, assert) {
     Trên cơ sở đó, xử lý nghiêm các cơ sở vi phạm.  Quản lý tốt từ kinh doanh đến sử dụng phụ gia thực phẩm \
     là việc làm hết sức cần thiết, nhất là khi Tết Nguyên đán đang đến, nhu cầu các loại thực phẩm của \
     người dân đang tăng cao. Có vậy mới góp phần hạn chế tình trạng ngộ độc thực phẩm cũng như phòng ngừa\
-    được các bệnh mãn tính.', options);
+    được các bệnh mãn tính.', {
+        maxTokensToMerge: 3,
+        keepMergedOnly: true,
+        tryToBeSmart: 1
+    });
 
     assert.includes(tokens, 'chất phụ gia');
     assert.includes(tokens, 'bộ y tế');
@@ -87,6 +84,46 @@ exports['test DocumentModel#parseText/smart'] = function(beforeEnd, assert) {
     assert.includes(tokens, 'thực phẩm');
     assert.includes(tokens, 'rhodamine b');
     assert.includes(tokens, 'tết nguyên đán');
+    
+    tokens = documentModel.parseText('So với cuối tuần trước, giá vàng SJC giảm khoảng 300 nghìn đồng/lượng.\
+    Giá vàng Rồng Thăng Long của Bảo Tín Minh Châu giao dịch ở 40,55- 40,85 triệu đồng/lượng (mua vào - bán\
+    ra), thấp hơn giá vàng SJC khoảng 1 triệu đồng/lượng. Sacombank SBJ vẫn báo giá vàng SJC bán ra với giá\
+    tròn 42 triệu đồng/lượng và giá mua vào là 41,6 triệu đồng/lượng.\
+    Tính chung, các tổ chức kinh doanh kim hoàn sáng nay kéo giá vàng miếng giảm từ 500.000 - 760.000 đồng\
+    mỗi lượng so với giá mua bán sáng qua, mức giảm cũng gần tương đương với đà giảm của vàng thế giới.\
+    Vàng thế giới giao ngay theo Kitco hiện ở 1.567,40 USD/oz, thấp hơn giá vàng quy đổi trong nước khoảng\
+    2,1 triệu đồng/lượng.\
+    Đầu giờ sáng nay (8/6), nhiều ngân hàng giảm giá bán USD 11 đồng so với chốt ngày hôm qua, đã dưới trần.\
+    Giá bán USD ở mức 21.025 - 21.036 đồng/USD. Giá mua USD ở mức 20.935 - 20.950 đồng/USD.\
+    Giá ở VCB là 20.950 – 21.036 đồng/USD; giá Eximbank là 20.945 – 21.025 đồng/USD.\
+    Theo Ngân hàng Nhà nước, tỷ giá bình quân liên ngân hàng ngày hôm nay (8/6) vẫn ở mức 20.828 đồng/USD.\
+    Tỷ giá trần của các ngân hàng thương mại là 21.036 đồng/USD.\
+    Phước Hà', {
+        maxTokensToMerge: 3,
+        keepMergedOnly: true,
+        tryToBeSmart: 1
+    });
+    
+    assert.includes(tokens, 'giá vàng');
+    assert.includes(tokens, 'sjc');
+    assert.includes(tokens, 'bảo tín minh châu');
+    assert.includes(tokens, 'sacombank sbj');
+    assert.includes(tokens, 'eximbank');
+    assert.includes(tokens, 'vcb');
+    assert.includes(tokens, 'ngân hàng');
+    assert.includes(tokens, '300 nghìn đồng/lượng');
+    assert.includes(tokens, '40,85 triệu đồng/lượng');
+    assert.includes(tokens, '42 triệu đồng/lượng');
+    assert.includes(tokens, '41,6 triệu đồng/lượng');
+    assert.includes(tokens, '1.567,40 usd/oz');
+    assert.includes(tokens, '2,1 triệu đồng/lượng');
+    assert.includes(tokens, '8/6');
+    assert.includes(tokens, '21.036 đồng/usd');
+    assert.includes(tokens, '20.950 đồng/usd');
+    assert.includes(tokens, '21.036 đồng/usd');
+    assert.includes(tokens, '21.025 đồng/usd');
+    assert.includes(tokens, '20.828 đồng/usd');
+    assert.includes(tokens, '21.036 đồng/usd');
 }
 
 exports['test DocumentModel#parseText/names'] = function(beforeEnd, assert) {

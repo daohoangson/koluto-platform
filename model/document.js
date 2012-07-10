@@ -77,7 +77,7 @@ documentModel.countTokens = function(tokens) {
 }
 
 documentModel.parseText = function(text, options) {
-    defaultOptions = {
+    _.defaults(options, {
          // this will set how tokens are merged together
          // with a value larger than 1, tokens will be merged
          // otherwise, the token list will be kept as is
@@ -87,28 +87,20 @@ documentModel.parseText = function(text, options) {
         keepMergedOnly: false,
         
         // tokens that exists in the list will be removed 
-        // from final result
+        // from final result and not merged
         ignoredList: [
-            'của', 'là', 'và', 'có', 'được', 'người', 'đã', 'không', 'trong',
-            'cho', 'những', 'các', 'với', 'này', 'để', 'ông', 'ra', 'khi', 'lại',
-            'đến', 'về', 'nhà', 'vào', 'cũng', 'làm', 'từ', 'đó', 'như', 'nhiều',
-            'sau', 'bị', 'tại', 'anh', 'phải', 'con', 'sự',
-            'tôi', 'việc', 'thì', 'chỉ', 'trên',
-            'còn', 'mà', 'thế', 'ngày', 'đi', 'nhưng', 'hiện',
-            'hàng', 'nhất', 'số', 'điều', 'theo', 'sẽ', 'bà',
-            'đang', 'cả', 'biết', 'mình', 'trước', 'vì', 'chị',
-            'rất', 'lên', 'rằng', 'nói', 'hơn', 'một', 'khác', 'chúng',
-            'đây',
-            // since 20-04-2012
-            'do', 'khá',
+            'của', 'là', 'và', 'có', 'đã',
+            'những', 'các', 'với',
+            'cũng', 'đó', 'như', 'nhiều',
+            'còn', 'mà', 'thế', 'đi', 'nhưng',
+            'nhất', 'theo', 'sẽ',
+            'đang', 'rất', 'hơn'
         ],
         
         // try to be smart or not?
         tryToBeSmart: 0
-    };
-    var options = options || {};
-    _.defaults(options, defaultOptions);
-    
+    });
+
     var tokenized = tokenizer.tokenize(text);
     var tokens = tokenized.tokens;
     text = tokenizer.normalize(text);
@@ -130,13 +122,13 @@ documentModel.parseText = function(text, options) {
         
         tokens = tokens.concat(newTokens);
     }
-
+    
     if (options.tryToBeSmart) {
+        tokens = documentModel._removeIrrelevantTokens(text, tokens, 50, options.ignoredList);
         // tokens = documentModel._removeSingleAppearTokens(tokens);
-        tokens = documentModel._removeIrrelevantTokens(text, tokens, 50);
         // tokens = documentModel._removeCompoundTokens(tokens);
     }
-    
+
     // filter out ignored tokens
     if (options.ignoredList.length > 0) {
         tokens = _.difference(tokens, options.ignoredList);
@@ -212,11 +204,14 @@ documentModel._removeSingleAppearTokens = function(tokens)
     return filtered;
 }
 
-documentModel._removeIrrelevantTokens = function(text, tokens, thresholdPercentage) {
+documentModel._removeIrrelevantTokens = function(text, tokens, thresholdPercentage, ignoredTokens) {
     var irrelevantTokens = [];
+    var processedTokens = [];
     
     _.each(tokens, function(token) {
-        if (!_.include(irrelevantTokens, token)) {
+        if (!_.include(processedTokens, token) /* && !_.include(ignoredTokens, token) */) {
+            processedTokens.push(token);
+            
             var tokensThatContainIt = [];
             var tokensThatContainItManyTime = [];
             var tokenCount = 0, offset, offset_tmp;
@@ -225,8 +220,13 @@ documentModel._removeIrrelevantTokens = function(text, tokens, thresholdPercenta
             // find all tokens that contain our token
             // this may catch some silly tokens
             _.each(tokens, function(token2) {
-                if (token2 != token && token2.indexOf(token) != -1) {
-                    tokensThatContainIt.push(token2);
+                if (token2 != token) {
+                    offset_tmp = token2.indexOf(token);
+                    if (offset_tmp != -1
+                        && (offset_tmp == 0 || token2[offset_tmp - 1] == ' ')
+                        && (offset_tmp == token2.length - token.length || token2[offset_tmp + token.length] == ' ')) {
+                        tokensThatContainIt.push(token2);
+                    }
                 }
             });
             
@@ -255,7 +255,9 @@ documentModel._removeIrrelevantTokens = function(text, tokens, thresholdPercenta
                         offset = 0;
                         while (true) {
                             offset_tmp = text.indexOf(token2, offset);
-                            if (offset_tmp != -1) {
+                            if (offset_tmp != -1
+                                && (offset_tmp == 0 || text[offset_tmp - 1] == ' ')
+                                && (offset_tmp == text.length - token2.length || text[offset_tmp + 1] == ' ')) {
                                 // found the token2
                                 offset = offset_tmp + 1;
                                 token2Count++;
@@ -276,6 +278,33 @@ documentModel._removeIrrelevantTokens = function(text, tokens, thresholdPercenta
                 // appear many time, it's likely that this token
                 // is irrelevant...
                 irrelevantTokens.push(token);
+                
+                // we also consider tokens that contain the token to be irrelevant
+                // with the exception of tokens that contains tokens-that-contain-it-many-time 
+                // make sense?
+                var alsoIrrelevantTokens = [];
+                _.each(tokensThatContainIt, function(token2) {
+                    var inContainsManyTime = false;
+                    
+                    _.each(tokensThatContainItManyTime, function(token3) {
+                        if (token2 == token3) {
+                            inContainsManyTime = true;
+                        } else {
+                            offset_tmp = token2.indexOf(token3);
+                            if (offset_tmp != -1
+                                && (offset_tmp == 0 || token2[offset_tmp - 1] == ' ')
+                                && (offset_tmp == token2.length - token3.length || token2[offset_tmp + token3.length] == ' ')) {
+                                inContainsManyTime = true;
+                            }
+                        }
+                    });
+                    
+                    if (!inContainsManyTime) {
+                        alsoIrrelevantTokens.push(token2);
+                    }
+                });
+
+                irrelevantTokens = irrelevantTokens.concat(alsoIrrelevantTokens);
             }
         }
     });
